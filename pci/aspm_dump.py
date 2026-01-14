@@ -17,6 +17,6 @@ if os.geteuid() != 0:
 args = get_args()
 dev = PciDev(args.dev)
 
-# Get the offset for MSI-X Capability structure
+# Get the offset for L1PM Capability structure
 l1pm_cap = dev.find_ecap(ECAP_ID.L1PM)
 dev.dump_l1pm(l1pm_cap)
