@@ -1,4 +1,4 @@
-import sys, os
+import re, sys, os
 
 sys.path.append(os.path.join(sys.path[0], ".."))
 from lib.devmem import *
@@ -20,12 +20,16 @@ class PciDev:
     def __init__(self, dev):
         self.dev = dev
         self.devmem = DevMem()
+        if os.path.exists(f"/sys/bus/pci/devices/{self.dev}/resource5"):
+            self.bar5 = DevMem(f"/sys/bus/pci/devices/{self.dev}/resource5")
+        else:
+            self.bar5 = None
 
         with open(f"/sys/bus/pci/devices/{dev}/config", mode="rb") as file:
             self.config = file.read()
 
         # Split PCI resource host addresses to double-dword string
-        resources = read_f(f"/sys/bus/pci/devices/{dev}/resource").split(' ')
+        resources = re.split(' |\n', read_f(f"/sys/bus/pci/devices/{dev}/resource"))
         self.base = int(resources[0], 16)
 
     def find_cap(self, target_cap_id):
@@ -64,12 +68,20 @@ class PciDev:
 
         return -1
 
+    def get_bar(self, bar_index):
+        offset = 0x10 + 4 * bar_index
+        return _read(self.config, offset, 4)
+
+    def read_bar5(self, offset, size):
+        if not self.bar5:
+            raise Exception("BAR 5 not available for {self.dev}")
+        return self.bar5.read(offset, size, False)
+
     def dump_bar(self):
         # Show the content for BAR 0 to 5
         for i in range(6):
-            offset = 0x10 + 4 * i
-            value = _read(self.config, offset, 4)
-            print(f"BAR {i}({offset:x})@{value:x}")
+            value = self.get_bar(i)
+            print(f"BAR {i}=0x{value:x}")
 
     def dump_msix(self, offset):
         msg_ctl = _read(self.config, offset, 4) >> 16

@@ -28,10 +28,16 @@ class DevMem:
         mapsize = align_up(mapsize, PAGE_SIZE)
 
         val = b""
-        with open(self.path, "r+") as f:
+        with open(self.path, "r+b") as f:
+            f.truncate(mapsize)
+
+            f.seek(0, os.SEEK_END)
+            file_size = f.tell()
+            f.seek(0, os.SEEK_SET)
+
             mem = mmap.mmap(
                 f.fileno(),
-                length=mapsize,
+                length=min(mapsize, file_size),
                 flags=mmap.MAP_SHARED,
                 prot=mmap.PROT_READ | mmap.PROT_WRITE,
                 offset=mapaddr,
