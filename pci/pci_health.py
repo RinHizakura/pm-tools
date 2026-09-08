@@ -105,11 +105,50 @@ def check_driver_bound(dev, body):
     return []
 
 
+def check_dpc_triggered(body):
+    """Downstream Port Containment fired and shut the link down."""
+    dpc_sta = field(r"DpcSta:\s*(.+)", body)
+    if dpc_sta and "Trigger+" in dpc_sta:
+        reason = field(r"Reason:(\S+)", dpc_sta)
+        return [f"DPC triggered (Reason:{reason}) -> port auto-disabled, link stays down until cleared/reset"]
+    return []
+
+
+def check_root_error_status(body):
+    """Root Port's RootSta shows an error was reported up to the root complex."""
+    root_sta = field(r"RootSta:\s*(.+)", body)
+    if not root_sta:
+        return []
+    set_bits = [b[:-1] for b in root_sta.split() if b.endswith("+")]
+    if set_bits:
+        return [f"Root Port reports error(s) from a downstream device: {', '.join(set_bits)}"]
+    return []
+
+
+def check_bus_aborts(body):
+    """Master/Target Abort seen on the primary bus Status register."""
+    m = re.search(r"^Status:\s*(.+)$", body, re.MULTILINE)
+    status = m.group(1) if m else None
+    if not status:
+        return []
+    issues = []
+    if "<MAbort+" in status:
+        issues.append("Master Abort signaled on this device's bus (<MAbort+)")
+    if "<TAbort+" in status:
+        issues.append("Target Abort signaled on this device's bus (<TAbort+)")
+    if ">TAbort+" in status:
+        issues.append("Target Abort received by this device (>TAbort+)")
+    return issues
+
+
 CHECKS = [
     lambda dev, body: check_slot_link_active(body),
     lambda dev, body: check_link_speed_width(body),
     lambda dev, body: check_aer_errors(body),
     check_driver_bound,
+    lambda dev, body: check_dpc_triggered(body),
+    lambda dev, body: check_root_error_status(body),
+    lambda dev, body: check_bus_aborts(body),
 ]
 
 
