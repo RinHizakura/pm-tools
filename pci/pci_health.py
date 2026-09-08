@@ -114,15 +114,44 @@ def check_dpc_triggered(body):
     return []
 
 
-def check_root_error_status(body):
-    """Root Port's RootSta shows an error was reported up to the root complex."""
-    root_sta = field(r"RootSta:\s*(.+)", body)
-    if not root_sta:
+def decode_requester_id(domain, hex_id):
+    """Requester ID (16-bit bus:device.function) -> full BDF string, e.g. domain='0001',
+    hex_id='0100' -> '0001:01:00.0'. Returns None for the all-zero placeholder."""
+    req = int(hex_id, 16)
+    if req == 0:
+        return None
+    bus, devfn = req >> 8, req & 0xFF
+    return f"{domain}:{bus:02x}:{devfn >> 3:02x}.{devfn & 0x7}"
+
+
+def check_root_error_status(dev, body):
+    """AER Root Error Status: an error was reported up to the root complex, from which
+    Requester ID (ErrorSrc) it came."""
+    err_idx = body.find("ErrorSrc:")
+    if err_idx == -1:
         return []
-    set_bits = [b[:-1] for b in root_sta.split() if b.endswith("+")]
-    if set_bits:
-        return [f"Root Port reports error(s) from a downstream device: {', '.join(set_bits)}"]
-    return []
+    # "RootSta:" also appears earlier in the plain Express capability for PME, and the AER
+    # RootSta can wrap onto a continuation line before ErrorSrc, so: take the ErrorSrc line,
+    # then walk back to the nearest preceding "RootSta:" (the AER one, since it's the closest).
+    before = body[:err_idx]
+    root_idx = before.rfind("RootSta:")
+    if root_idx == -1:
+        return []
+    root_sta_block = before[root_idx + len("RootSta:"):]
+    set_bits = [b[:-1] for b in root_sta_block.split() if b.endswith("+")]
+    if not set_bits:
+        return []
+
+    domain = dev["bdf"].split(":", 1)[0]
+    error_src = field(r"ErrorSrc:\s*(.+)", body)
+    sources = []
+    for label, hex_id in re.findall(r"(ERR_\S+):\s*([0-9a-fA-F]+)", error_src or ""):
+        bdf = decode_requester_id(domain, hex_id)
+        if bdf:
+            sources.append(f"{label}={bdf}")
+    src_desc = ", ".join(sources) if sources else (error_src or "unknown source")
+
+    return [f"Root Port reports error(s) from downstream device ({src_desc}): {', '.join(set_bits)}"]
 
 
 def check_bus_aborts(body):
@@ -147,7 +176,7 @@ CHECKS = [
     lambda dev, body: check_aer_errors(body),
     check_driver_bound,
     lambda dev, body: check_dpc_triggered(body),
-    lambda dev, body: check_root_error_status(body),
+    check_root_error_status,
     lambda dev, body: check_bus_aborts(body),
 ]
 
