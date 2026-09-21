@@ -11,6 +11,7 @@ pm-tools is a suite of tools that facilitate obtaining or configuring power mana
 * `aspm_dump.py`: Dump ASPM-related information
 * `msi_dump.py`: Dump PCIe MSI/MSI-X related information
 * `pcie_setspeed.sh`: Configure the PCIe device Gen speed in runtime
+* `pci_health.py`: Report PCIe link/slot/AER anomalies from `lspci -vvv`
 
 ### usb
 
@@ -19,3 +20,7 @@ pm-tools is a suite of tools that facilitate obtaining or configuring power mana
 ### ata
 
 * `pcie_sata_controller.py`: Get the link power state of the SATA devices under the PCIe SATA controller 
+
+### wifi
+
+* `phyrate.sh`: Compute the theoretical 802.11 PHY rate (a/b/g/n/ac/ax/be) of a connected WiFi interface
